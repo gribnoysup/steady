@@ -4,7 +4,7 @@ import favicon from './assets/favicon.ico';
 
 let Head = () => (
   <head>
-    <meta charset="utf-8" />
+    <meta charSet="utf-8" />
     <link rel="shortcut icon" href={favicon} />
     <meta
       name="viewport"
