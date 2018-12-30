@@ -43,7 +43,7 @@ cli
     'Path to Steady config file that allows to modify default webpack configuration'
   )
   .action(({ config }) => {
-    start({ config });
+    start(config);
   });
 
 cli
