@@ -3,21 +3,11 @@
 let { name, version } = require('../package.json');
 let cli = require('sade')(name);
 
-let build = require('../lib/build');
 let create = require('../lib/create');
+let start = require('../lib/start');
+let build = require('../lib/build');
 
 cli.version(version);
-
-cli
-  .command('build')
-  .describe('Generage static webpage assets')
-  .option(
-    '-c, --config',
-    'Path to Steady config file that allows to modify default webpack configuration'
-  )
-  .action(({ config }) => {
-    build(config);
-  });
 
 cli
   .command('create <project-directory>')
@@ -42,5 +32,27 @@ cli
       create({ projectDir, template, commit, scriptsVersion });
     }
   );
+
+cli
+  .command('start')
+  .describe('Start Steady dev server')
+  .option(
+    '-c, --config',
+    'Path to Steady config file that allows to modify default webpack configuration'
+  )
+  .action(() => {
+    start();
+  });
+
+cli
+  .command('build')
+  .describe('Generage static webpage assets')
+  .option(
+    '-c, --config',
+    'Path to Steady config file that allows to modify default webpack configuration'
+  )
+  .action(({ config }) => {
+    build(config);
+  });
 
 cli.parse(process.argv);
