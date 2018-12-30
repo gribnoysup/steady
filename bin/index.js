@@ -12,6 +12,7 @@ cli.version(version);
 cli
   .command('create <project-directory>')
   .describe('Create Steady projet from template')
+  .example('./my-awesome-project --template react-minimal')
   .option(
     '-t, --template',
     'Template that will be used to generate the project',
@@ -36,17 +37,19 @@ cli
 cli
   .command('start')
   .describe('Start Steady dev server')
+  .example('-c steady.config.js')
   .option(
     '-c, --config',
     'Path to Steady config file that allows to modify default webpack configuration'
   )
-  .action(() => {
-    start();
+  .action(({ config }) => {
+    start({ config });
   });
 
 cli
   .command('build')
   .describe('Generage static webpage assets')
+  .example('-c steady.config.js')
   .option(
     '-c, --config',
     'Path to Steady config file that allows to modify default webpack configuration'
