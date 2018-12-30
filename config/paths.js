@@ -1,6 +1,8 @@
-const path = require('path');
+let path = require('path');
 
 module.exports = {
+  // Default src dir
+  appSrcDir: path.resolve(process.cwd(), 'src'),
   // Default app path
   appSrc: path.resolve(process.cwd(), 'src', 'index.js'),
   // Allows to override the default renderToString method for the page
@@ -13,4 +15,6 @@ module.exports = {
   appBabelrc: path.resolve(process.cwd(), 'babel.config.js'),
   // HTML template
   htmlTemplate: path.resolve(__dirname, '..', 'lib', 'template.html'),
+  // Project temlpates dir
+  templates: path.resolve(__dirname, '..', 'templates'),
 };
