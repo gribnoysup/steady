@@ -8,8 +8,8 @@ Generate completely\* static html pages from your React code
 
 This project is pretty silly, was made to solve my special use-case and was
 mostly an experiment to play around with `create-*` tools idea and
-`babel-macros`. It is nowhere near done and polished. Think twice before
-using it, but feel free to examine code and learn from it!
+`babel-macros`. It is nowhere near done and polished. Think twice before using
+it, but feel free to examine code and learn from it!
 
 ## What Is Steady?
 

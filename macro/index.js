@@ -278,6 +278,11 @@ function SteadyMacro({ references, state, babel, source }) {
           )
           .join('\n');
 
+        source =
+          process.env.NODE_ENV === 'production'
+            ? terser.minify(source).code
+            : source;
+
         scriptTag = createJSXScriptTag(source);
       }
 
