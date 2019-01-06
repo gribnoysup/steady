@@ -26,24 +26,33 @@ let inlineScriptBabelConfig = {
   ],
 };
 
+/**
+ * Additionally formats error created by buildCodeFrameError
+ */
+let createFormattedError = (path, message) => {
+  let error = path.buildCodeFrameError('\n\n  ' + message + '\n');
+  error.message = `\n\n${error.message}\n\n`;
+  return error;
+};
+
 let createSnippet = (id, snippet) => {
   let source = `
     (function() {
-      var currentScript =
-        document.currentScript ||
-        document.scripts[document.scripts.length - 1] ||
-        (function() {
-          var scripts = document.getElementsByTagName("script");
-          return scripts[scripts.length - 1];
-        })();
-    
-      var prevElem = currentScript.previousElementSibling;
-    
-      (prevElem.id === "${id}"
-        ? prevElem
-        : prevElem.querySelector("#${id}")
-      ).${snippet}
-    })();
+      var currentScript = document.currentScript || (function() {
+        var scripts = document.getElementsByTagName("script");
+        return scripts[scripts.length - 1];
+      })();
+
+      var previousSibiling =
+        currentScript.previousElementSibling;
+
+      var eventTarget =
+        previousSibiling.id === "${id}"
+          ? previousSibiling
+          : previousSibiling.querySelector("#${id}");
+
+      ${snippet}
+    })();  
   `;
 
   return process.env.NODE_ENV === 'production'
@@ -53,7 +62,7 @@ let createSnippet = (id, snippet) => {
 
 function SteadyMacro({ references, state, babel, source }) {
   let { types: t, transformFromAstSync: fromAst } = babel;
-  let { Component } = references;
+  let { Component, Window } = references;
 
   /**
    * Returns string (both literal and expression with string)
@@ -124,14 +133,17 @@ function SteadyMacro({ references, state, babel, source }) {
    * Returns a string of code that calls addEventListener with provided
    * event name and event handler
    */
-  let createAddEventHandlerScript = (eventName, eventHandler) => {
+  let createAddEventHandlerScript = (member, eventName, eventHandler) => {
     let { code } = fromAst(
       t.program([
         t.expressionStatement(
-          t.callExpression(t.identifier('addEventListener'), [
-            t.stringLiteral(eventName),
-            eventHandler.node,
-          ])
+          t.callExpression(
+            t.memberExpression(
+              t.identifier(member),
+              t.identifier('addEventListener')
+            ),
+            [t.stringLiteral(eventName), eventHandler.node]
+          )
         ),
       ]),
       null,
@@ -185,14 +197,14 @@ function SteadyMacro({ references, state, babel, source }) {
           // `as` with unique id, generate code from handler AST and
           // put it in the script tag near the component
           //
-          // <Component as="div" onClick={() => { console.log("Hello"); }} /> ->
+          // <Component as="div" onClick={() => { console.log("Hello"); }} />
           //
           // <>
           //   <div id="unique" />
-          //   <script 
-          //     dangerouslySetInnerHTML={{ 
+          //   <script
+          //     dangerouslySetInnerHTML={{
           //       __html:
-          //         "document.getElementById('unique').addEventListener('click', () => { console.log('Hello'); })" 
+          //         "document.getElementById('unique').addEventListener('click', () => { console.log('Hello'); })"
           //     }}
           //   />
           // </>
@@ -205,9 +217,13 @@ function SteadyMacro({ references, state, babel, source }) {
 
             let source = eventHandlers
               .map(({ eventName, eventHandler }) =>
-                createAddEventHandlerScript(eventName, eventHandler)
+                createAddEventHandlerScript(
+                  'eventTarget',
+                  eventName,
+                  eventHandler
+                )
               )
-              .join('');
+              .join('\n');
 
             eventHandlers.forEach(({ path }) => {
               path.remove();
@@ -223,19 +239,71 @@ function SteadyMacro({ references, state, babel, source }) {
 
             jsxElement.replaceWith(fragment);
           } else {
+            // Otherwise just remove the as attribute
             asAttr.remove();
           }
         } else {
-          // TODO: error about unsupported as type
+          throw createFormattedError(
+            path,
+            '`as` attribute should be a string or another React Component: <Component as="div" />, <Component as={MyAwesomeButton} />'
+          );
         }
       } else {
-        // TODO: error about required `as` attr
+        throw createFormattedError(
+          path,
+          'Missing required `as` attribute on Component: <Component as="div" />'
+        );
       }
+    } else if (!t.isJSXIdentifier(path)) {
+      throw createFormattedError(
+        path,
+        'You can use Component only as JSX Element: <Component as="div" />'
+      );
+    } else {
+      // Ignore everything else
+    }
+  };
+
+  let replaceWithWindowScripts = path => {
+    if (t.isJSXIdentifier(path) && t.isJSXOpeningElement(path.parentPath)) {
+      let jsxElement = path.findParent(p => t.isJSXElement(p));
+      let eventHandlers = getAllEventHandlers(jsxElement);
+
+      let scriptTag;
+
+      if (eventHandlers.length > 0) {
+        let source = eventHandlers
+          .map(({ eventName, eventHandler }) =>
+            createAddEventHandlerScript('window', eventName, eventHandler)
+          )
+          .join('\n');
+
+        scriptTag = createJSXScriptTag(source);
+      }
+
+      let fragment = t.jsxFragment(
+        t.jsxOpeningFragment(),
+        t.jsxClosingFragment(),
+        jsxElement.node.children.concat(scriptTag || [])
+      );
+
+      jsxElement.replaceWith(fragment);
+    } else if (!t.isJSXIdentifier(path)) {
+      throw createFormattedError(
+        path,
+        'You can use Window only as JSX Element: <Window />'
+      );
+    } else {
+      // Ignore everything else
     }
   };
 
   Component.forEach(path => {
     replaceComponent(path);
+  });
+
+  Window.forEach(path => {
+    replaceWithWindowScripts(path);
   });
 }
 
