@@ -20,7 +20,7 @@
     "babel-plugin-macros": "^2.4.3",
     "browser-sync": "^2.26.3",
     "browser-sync-webpack-plugin": "^2.2.2",
-    "critters-webpack-plugin": "^2.1.2",
+    "critters-webpack-plugin": "^2.2.0",
     "css-loader": "^2.1.0",
     "cuid": "^2.1.4",
     "execa": "^1.0.0",

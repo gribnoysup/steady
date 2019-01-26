@@ -6,7 +6,7 @@ module.exports = {
   // Default app path
   appSrc: path.resolve(process.cwd(), 'src', 'index.js'),
   // Allows to override the default renderToString method for the page
-  appRender: path.resolve(process.cwd(), 'src', '_render.js'),
+  appRenderer: path.resolve(process.cwd(), 'src', '_render.js'),
   // Stores temporary build files
   outputDir: path.resolve(process.cwd(), 'dist'),
   // Babel config
@@ -17,4 +17,6 @@ module.exports = {
   htmlTemplate: path.resolve(__dirname, '..', 'lib', 'template.html'),
   // Project temlpates dir
   templates: path.resolve(__dirname, '..', 'templates'),
+  // Default page renderer
+  defaultRenderer: path.resolve(__dirname, '..', 'lib', 'renderer.js'),
 };
