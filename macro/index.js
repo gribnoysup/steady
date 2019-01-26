@@ -1,5 +1,6 @@
 // let printAST = require('ast-pretty-print');
 let { createMacro } = require('babel-plugin-macros');
+let { template, types: t } = require('@babel/core');
 let cuid = require('cuid');
 let terser = require('terser');
 
@@ -26,6 +27,38 @@ let inlineScriptBabelConfig = {
   ],
 };
 
+let jsxTemplate = str => template(str, { plugins: ['jsx'] });
+
+let scriptTemplate = jsxTemplate(`
+  <script dangerouslySetInnerHTML={{ __html: SOURCE }} />
+`);
+
+let iifeTemplate = template(`
+  (function() {
+    var currentScript = document.currentScript || (function() {
+      var scripts = document.getElementsByTagName("script");
+      return scripts[scripts.length - 1];
+    })();
+
+    var previousSibiling =
+      currentScript.previousElementSibling;
+
+    var EVENT_TARGET =
+      previousSibiling.id === TARGET_ID
+        ? previousSibiling
+        : previousSibiling.getElementById(TARGET_ID);
+
+    CODE_BLOCK
+  })();  
+`);
+
+let addListenerTemplate = template(`
+  EVENT_TARGET.addEventListener(EVENT_NAME, EVENT_HANDLER);
+`);
+
+let fragment = (...children) =>
+  t.jsxFragment(t.jsxOpeningFragment(), t.jsxClosingFragment(), children);
+
 /**
  * Additionally formats error created by buildCodeFrameError
  */
@@ -35,34 +68,21 @@ let createFormattedError = (path, message) => {
   return error;
 };
 
-let createSnippet = (id, snippet) => {
-  let source = `
-    (function() {
-      var currentScript = document.currentScript || (function() {
-        var scripts = document.getElementsByTagName("script");
-        return scripts[scripts.length - 1];
-      })();
-
-      var previousSibiling =
-        currentScript.previousElementSibling;
-
-      var eventTarget =
-        previousSibiling.id === "${id}"
-          ? previousSibiling
-          : previousSibiling.querySelector("#${id}");
-
-      ${snippet}
-    })();  
-  `;
-
-  return process.env.NODE_ENV === 'production'
-    ? terser.minify(source).code
-    : source;
-};
-
-function SteadyMacro({ references, state, babel, source }) {
-  let { types: t, transformFromAstSync: fromAst } = babel;
+function SteadyMacro({ references, /** state, */ babel /**, source */ }) {
+  let { transformFromAstSync } = babel;
   let { Component, Window } = references;
+
+  let codeFromAST = ast => {
+    let { code } = transformFromAstSync(
+      t.program([].concat(ast)),
+      null,
+      inlineScriptBabelConfig
+    );
+
+    return process.env.NODE_ENV === 'production'
+      ? terser.minify(code).code
+      : code;
+  };
 
   /**
    * Returns string (both literal and expression with string)
@@ -103,54 +123,6 @@ function SteadyMacro({ references, state, babel, source }) {
 
         return { eventName, eventHandler, path };
       });
-  };
-
-  /**
-   * Create script JSXElement with dangerouslySetInnerHTML set
-   * to provided value
-   */
-  let createJSXScriptTag = code =>
-    t.jsxElement(
-      t.jsxOpeningElement(t.jsxIdentifier('script'), [
-        t.jsxAttribute(
-          t.jsxIdentifier('dangerouslySetInnerHTML'),
-          t.jsxExpressionContainer(
-            t.objectExpression([
-              t.objectProperty(
-                t.stringLiteral('__html'),
-                t.stringLiteral(code)
-              ),
-            ])
-          )
-        ),
-      ]),
-      null,
-      [],
-      true
-    );
-
-  /**
-   * Returns a string of code that calls addEventListener with provided
-   * event name and event handler
-   */
-  let createAddEventHandlerScript = (member, eventName, eventHandler) => {
-    let { code } = fromAst(
-      t.program([
-        t.expressionStatement(
-          t.callExpression(
-            t.memberExpression(
-              t.identifier(member),
-              t.identifier('addEventListener')
-            ),
-            [t.stringLiteral(eventName), eventHandler.node]
-          )
-        ),
-      ]),
-      null,
-      inlineScriptBabelConfig
-    );
-
-    return code;
   };
 
   let replaceComponent = path => {
@@ -215,29 +187,29 @@ function SteadyMacro({ references, state, babel, source }) {
               t.jsxAttribute(t.jsxIdentifier('id'), t.stringLiteral(uid))
             );
 
-            let source = eventHandlers
-              .map(({ eventName, eventHandler }) =>
-                createAddEventHandlerScript(
-                  'eventTarget',
-                  eventName,
-                  eventHandler
-                )
-              )
-              .join('\n');
+            let target = t.identifier('eventTarget');
+
+            let iife = iifeTemplate({
+              EVENT_TARGET: target,
+              TARGET_ID: t.stringLiteral(uid),
+              CODE_BLOCK: eventHandlers.map(({ eventName, eventHandler }) =>
+                addListenerTemplate({
+                  EVENT_TARGET: target,
+                  EVENT_NAME: t.stringLiteral(eventName),
+                  EVENT_HANDLER: eventHandler.node,
+                })
+              ),
+            });
+
+            let { expression: jsxScriptTag } = scriptTemplate({
+              SOURCE: t.stringLiteral(codeFromAST(iife)),
+            });
+
+            jsxElement.replaceWith(fragment(jsxElement.node, jsxScriptTag));
 
             eventHandlers.forEach(({ path }) => {
               path.remove();
             });
-
-            let scriptTag = createJSXScriptTag(createSnippet(uid, source));
-
-            let fragment = t.jsxFragment(
-              t.jsxOpeningFragment(),
-              t.jsxClosingFragment(),
-              [jsxElement.node, scriptTag]
-            );
-
-            jsxElement.replaceWith(fragment);
           } else {
             // Otherwise just remove the as attribute
             asAttr.remove();
@@ -269,30 +241,25 @@ function SteadyMacro({ references, state, babel, source }) {
       let jsxElement = path.findParent(p => t.isJSXElement(p));
       let eventHandlers = getAllEventHandlers(jsxElement);
 
-      let scriptTag;
+      let jsxScriptTag;
 
       if (eventHandlers.length > 0) {
-        let source = eventHandlers
-          .map(({ eventName, eventHandler }) =>
-            createAddEventHandlerScript('window', eventName, eventHandler)
-          )
-          .join('\n');
+        let attachEventsAST = eventHandlers.map(({ eventName, eventHandler }) =>
+          addListenerTemplate({
+            EVENT_TARGET: t.identifier('window'),
+            EVENT_NAME: t.stringLiteral(eventName),
+            EVENT_HANDLER: eventHandler.node,
+          })
+        );
 
-        source =
-          process.env.NODE_ENV === 'production'
-            ? terser.minify(source).code
-            : source;
-
-        scriptTag = createJSXScriptTag(source);
+        ({ expression: jsxScriptTag } = scriptTemplate({
+          SOURCE: t.stringLiteral(codeFromAST(attachEventsAST)),
+        }));
       }
 
-      let fragment = t.jsxFragment(
-        t.jsxOpeningFragment(),
-        t.jsxClosingFragment(),
-        jsxElement.node.children.concat(scriptTag || [])
+      jsxElement.replaceWith(
+        fragment(...jsxElement.node.children.concat(jsxScriptTag || []))
       );
-
-      jsxElement.replaceWith(fragment);
     } else if (!t.isJSXIdentifier(path)) {
       throw createFormattedError(
         path,
