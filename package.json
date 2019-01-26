@@ -54,6 +54,7 @@
   },
   "devDependencies": {
     "ast-pretty-print": "^2.0.1",
+    "eslint": "^5.12.1",
     "react": "^16.7.0",
     "react-dom": "^16.7.0"
   }
