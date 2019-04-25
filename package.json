@@ -1,6 +1,6 @@
 {
   "name": "@steady/scripts",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Static webpages generator for React and friends",
   "bin": {
     "steady-scripts": "bin/index.js"
