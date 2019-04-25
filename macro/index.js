@@ -70,7 +70,7 @@ let createFormattedError = (path, message) => {
 
 function SteadyMacro({ references, /** state, */ babel /**, source */ }) {
   let { transformFromAstSync } = babel;
-  let { Component, Window } = references;
+  let { Component = [], Window = [] } = references || {};
 
   let codeFromAST = ast => {
     let { code } = transformFromAstSync(
